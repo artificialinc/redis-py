@@ -475,6 +475,7 @@ class Connection:
         "_buffer_cutoff",
         "_lock",
         "_socket_read_size",
+        "_stream_limit",
         "__dict__",
     )
 
@@ -504,6 +505,7 @@ class Connection:
         redis_connect_func: Optional[ConnectCallbackT] = None,
         encoder_class: Type[Encoder] = Encoder,
         credential_provider: Optional[CredentialProvider] = None,
+        stream_limit: Optional[int] = None,
     ):
         if (username or password) and credential_provider is not None:
             raise DataError(
@@ -550,6 +552,7 @@ class Connection:
         self.redis_connect_func = redis_connect_func
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
+        self._stream_limit = stream_limit
         self._socket_read_size = socket_read_size
         self.set_parser(parser_class)
         self._connect_callbacks: List[weakref.WeakMethod[ConnectCallbackT]] = []
@@ -637,10 +640,14 @@ class Connection:
     async def _connect(self):
         """Create a TCP socket connection"""
         async with async_timeout.timeout(self.socket_connect_timeout):
+            extra_args = {}
+            if self._stream_limit:
+                extra_args["limit"] = self._stream_limit
             reader, writer = await asyncio.open_connection(
                 host=self.host,
                 port=self.port,
                 ssl=self.ssl_context.get() if self.ssl_context else None,
+                **extra_args,
             )
         self._reader = reader
         self._writer = writer
